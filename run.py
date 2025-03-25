@@ -7,6 +7,9 @@ import numpy as np
 import torch
 from pathlib import Path
 
+# Set display environment variable for headless environments
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
+
 # Set MPS fallback for operations not supported on Apple Silicon
 if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
     os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
@@ -23,7 +26,7 @@ def main():
     # ===============================================
     
     # Input/Output
-    source = 0  # Path to input video file or webcam index (0 for default camera)
+    source = "/media/M2_disk/roger/sonar/YOLO-3D/ROSALÍA.mp4"  # Path to input video file or webcam index (0 for default camera)
     output_path = "output.mp4"  # Path to output video file
     
     # Model settings
@@ -31,7 +34,7 @@ def main():
     depth_model_size = "small"  # Depth Anything v2 model size: "small", "base", "large"
     
     # Device settings
-    device = 'cpu'  # Force CPU for stability
+    device = 0  # 'cpu' Force CPU for stability
     
     # Detection settings
     conf_threshold = 0.25  # Confidence threshold for object detection
@@ -42,7 +45,7 @@ def main():
     enable_tracking = True  # Enable object tracking
     enable_bev = True  # Enable Bird's Eye View visualization
     enable_pseudo_3d = True  # Enable pseudo-3D visualization
-    
+    headless = True  # Enable headless mode (no UI)
     # Camera parameters - simplified approach
     camera_params_file = None  # Path to camera parameters file (None to use default parameters)
     # ===============================================
@@ -296,16 +299,22 @@ def main():
             # Write frame to output video
             out.write(result_frame)
             
-            # Display frames
-            cv2.imshow("3D Object Detection", result_frame)
-            cv2.imshow("Depth Map", depth_colored)
-            cv2.imshow("Object Detection", detection_frame)
-            
-            # Check for key press again at the end of the loop
-            key = cv2.waitKey(1)
-            if key == ord('q') or key == 27 or (key & 0xFF) == ord('q') or (key & 0xFF) == 27:
-                print("Exiting program...")
-                break
+            if not headless:
+                # Display frames only if not in headless mode
+                cv2.imshow("3D Object Detection", result_frame)
+                cv2.imshow("Depth Map", depth_colored)
+                cv2.imshow("Object Detection", detection_frame)
+                
+                # Check for key press at the end of the loop
+                key = cv2.waitKey(1)
+                if key == ord('q') or key == 27 or (key & 0xFF) == ord('q') or (key & 0xFF) == 27:
+                    print("Exiting program...")
+                    break
+            else:
+                # For headless mode, we need a different way to handle early termination
+                # This just prints progress but doesn't check for key presses
+                if frame_count % 100 == 0:
+                    print(f"Processed {frame_count} frames ({fps_display})")
         
         except Exception as e:
             print(f"Error processing frame: {e}")
