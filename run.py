@@ -15,7 +15,8 @@ if hasattr(torch, 'backends') and hasattr(torch.backends, 'mps') and torch.backe
     os.environ['PYTORCH_ENABLE_MPS_FALLBACK'] = '1'
 
 # Import our modules
-from detection_model import ObjectDetector
+#from detection_model import ObjectDetector
+from pose_model import ObjectDetector
 from depth_model import DepthEstimator
 from bbox3d_utils import BBox3DEstimator, BirdEyeView
 from load_camera_params import load_camera_params, apply_camera_params_to_estimator
@@ -174,7 +175,8 @@ def main():
             
             for detection in detections:
                 try:
-                    bbox, score, class_id, obj_id = detection
+                    # Update to handle the new detection format that includes keypoints
+                    bbox, score, class_id, obj_id, keypoints = detection
                     
                     # Get class name
                     class_name = detector.get_class_names()[class_id]
@@ -192,6 +194,18 @@ def main():
                         depth_value = depth_estimator.get_depth_in_region(depth_map, bbox, method='median')
                         depth_method = 'median'
                     
+                    # Process keypoints if available
+                    keypoint_depths = []
+                    if keypoints is not None:
+                        for kpt in keypoints:
+                            x, y, conf = kpt
+                            if conf > 0.5:  # Only process keypoints with confidence > 0.5
+                                # Get depth at keypoint location
+                                kpt_depth = depth_estimator.get_depth_at_point(depth_map, int(x), int(y))
+                                keypoint_depths.append(kpt_depth)
+                            else:
+                                keypoint_depths.append(None)
+                    
                     # Create a simplified 3D box representation
                     box_3d = {
                         'bbox_2d': bbox,
@@ -199,7 +213,9 @@ def main():
                         'depth_method': depth_method,
                         'class_name': class_name,
                         'object_id': obj_id,
-                        'score': score
+                        'score': score,
+                        'keypoints': keypoints,
+                        'keypoint_depths': keypoint_depths
                     }
                     
                     boxes_3d.append(box_3d)
@@ -207,6 +223,10 @@ def main():
                     # Keep track of active IDs for tracker cleanup
                     if obj_id is not None:
                         active_ids.append(obj_id)
+                except ValueError as e:
+                    print(f"Detection format error: {e}")
+                    print(f"Detection data: {detection}")
+                    continue
                 except Exception as e:
                     print(f"Error processing detection: {e}")
                     continue
@@ -233,8 +253,42 @@ def main():
                     
                     # Draw box with depth information
                     result_frame = bbox3d_estimator.draw_box_3d(result_frame, box_3d, color=color)
+                    
+                    # Draw keypoints and skeleton if available
+                    if 'keypoints' in box_3d and box_3d['keypoints'] is not None:
+                        keypoints = box_3d['keypoints']
+                        
+                        # Draw individual keypoints with depth information
+                        for i, kpt in enumerate(keypoints):
+                            x, y, conf = kpt
+                            if conf > 0.5:  # Only draw keypoints with confidence > 0.5
+                                # Get depth value for this keypoint
+                                kpt_depth = box_3d.get('keypoint_depths', [])[i] if i < len(box_3d.get('keypoint_depths', [])) else None
+                                
+                                # Use depth to determine circle color (red->yellow->green from near to far)
+                                if kpt_depth is not None:
+                                    # Normalize depth within 0-5 meter range
+                                    normalized_depth = min(1.0, max(0.0, kpt_depth / 5.0))
+                                    # Create color: red (0,0,255) to green (0,255,0)
+                                    kpt_color = (0, int(255 * normalized_depth), int(255 * (1-normalized_depth)))
+                                else:
+                                    kpt_color = (0, 255, 0)  # Default green
+                                
+                                # Draw keypoint circle
+                                cv2.circle(result_frame, (int(x), int(y)), 5, kpt_color, -1)
+                                
+                                # Optionally display depth next to important keypoints (e.g., head)
+                                if i == 0 and kpt_depth is not None:  # Assuming 0 is the head keypoint
+                                    cv2.putText(result_frame, f"{kpt_depth:.2f}m", 
+                                            (int(x) + 5, int(y) - 5), 
+                                            cv2.FONT_HERSHEY_SIMPLEX, 0.4, kpt_color, 1)
+                        
+                        # Draw skeleton if it's a person
+                        if 'person' in class_name:
+                            # Use the draw_skeleton method from your detector
+                            result_frame = detector.draw_skeleton(result_frame, np.array(keypoints))
                 except Exception as e:
-                    print(f"Error drawing box: {e}")
+                    print(f"Error drawing object: {e}")
                     continue
             
             # Draw Bird's Eye View if enabled

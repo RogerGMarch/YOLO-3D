@@ -40,11 +40,11 @@ class ObjectDetector:
         
         # Map model size to model name
         model_map = {
-            'nano': 'YOLO11n-pose',
-            'small': 'YOLO11s-pose',
-            'medium': 'YOLO11m-pose',
-            'large': 'YOLO11l-pose',
-            'extra': 'YOLO11x-pose'
+            'nano': 'yolo11n-pose',
+            'small': 'yolo11s-pose',
+            'medium': 'yolo11m-pose',
+            'large': 'yolo11l-pose',
+            'extra': 'yolo11x-pose'
         }
         
         model_name = model_map.get(model_size.lower(), model_map['small'])
@@ -270,6 +270,52 @@ class ObjectDetector:
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         
         return annotated_image, detections
+    
+    def draw_skeleton(self, image, keypoints, keypoint_threshold=0.5):
+        """
+        Draw skeleton connections between keypoints
+        
+        Args:
+            image (numpy.ndarray): Image to draw on
+            keypoints (numpy.ndarray): Keypoints array with shape (num_keypoints, 3) where each row is (x, y, confidence)
+            keypoint_threshold (float): Confidence threshold for keypoints
+        
+        Returns:
+            numpy.ndarray: Image with skeleton drawn
+        """
+        # Define the connections between keypoints for COCO format
+        # Example for COCO 17 keypoints model:
+        skeleton = [
+            [16, 14], [14, 12], [17, 15], [15, 13], [12, 13], [6, 12], [7, 13],
+            [6, 7], [6, 8], [7, 9], [8, 10], [9, 11], [2, 3], [1, 2], [1, 3],
+            [2, 4], [3, 5], [4, 6], [5, 7]
+        ]
+        
+        # Define colors for each limb
+        colors = [
+            (255, 0, 0), (255, 85, 0), (255, 170, 0), (255, 255, 0), (170, 255, 0),
+            (85, 255, 0), (0, 255, 0), (0, 255, 85), (0, 255, 170), (0, 255, 255),
+            (0, 170, 255), (0, 85, 255), (0, 0, 255), (85, 0, 255), (170, 0, 255),
+            (255, 0, 255), (255, 0, 170), (255, 0, 85)
+        ]
+        
+        for i, (p1, p2) in enumerate(skeleton):
+            # COCO keypoints are 1-indexed, so we subtract 1
+            idx1, idx2 = p1 - 1, p2 - 1
+            
+            # Check that both keypoints are available (some models may have different formats)
+            if idx1 >= len(keypoints) or idx2 >= len(keypoints):
+                continue
+                
+            # Get keypoints
+            k1, k2 = keypoints[idx1], keypoints[idx2]
+            
+            # Check confidence
+            if k1[2] > keypoint_threshold and k2[2] > keypoint_threshold:
+                color = colors[i % len(colors)]
+                cv2.line(image, (int(k1[0]), int(k1[1])), (int(k2[0]), int(k2[1])), color, 2)
+        
+        return image
         
     def get_class_names(self):
         """
