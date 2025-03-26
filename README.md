@@ -1,6 +1,6 @@
 # YOLO-3D
 
-A real-time 3D object detection system that combines YOLOv11 for object detection with Depth Anything v2 for depth estimation to create pseudo-3D bounding boxes and bird's eye view visualization.
+A real-time 3D object detection system that combines YOLOv11 for object and pose detection with Depth Anything v2 for depth estimation to create pseudo-3D bounding boxes and bird's eye view visualization.
 
 ## Features
 
@@ -31,7 +31,9 @@ A real-time 3D object detection system that combines YOLOv11 for object detectio
 2. Install dependencies:
    ```
    uv init
+   
    uv add -r requirements.txt
+   or uv sync
    ```
 
 3. Download model weights (will be downloaded automatically on first run)
@@ -41,7 +43,7 @@ A real-time 3D object detection system that combines YOLOv11 for object detectio
 Run the main script:
 
 ```bash
-python run.py
+uv run run.py
 ```
 
 ### Configuration Options
@@ -73,6 +75,7 @@ YOLO-3D/
 
 │── run.py                  # Main script
 │── detection_model.py      # YOLOv11 object detection
+│── pose_model.py           # YOLOv11 pose and object detection
 │── depth_model.py          # Depth Anything v2 depth estimation
 │── bbox3d_utils.py         # 3D bounding box utilities
 │── load_camera_params.py   # Camera parameter utilities
@@ -83,6 +86,7 @@ YOLO-3D/
 ## How It Works
 
 1. **Object Detection**: YOLOv11 detects objects in the frame and provides 2D bounding boxes
+1. **Pose Detection**: YOLOv11 detects the pose in the frame and provides the keypoints 
 2. **Depth Estimation**: Depth Anything v2 generates a depth map for the entire frame
 3. **3D Box Estimation**: Combines 2D boxes with depth information to create 3D boxes
 4. **Visualization**: Renders 3D boxes and bird's eye view for better spatial understanding

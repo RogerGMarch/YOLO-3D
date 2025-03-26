@@ -27,7 +27,7 @@ def main():
     # ===============================================
     
     # Input/Output
-    source = "/media/M2_disk/roger/sonar/YOLO-3D/ROSALÍA.mp4"  # Path to input video file or webcam index (0 for default camera)
+    source = 0 # Path to input video file or webcam index (0 for default camera)
     output_path = "output.mp4"  # Path to output video file
     
     # Model settings
