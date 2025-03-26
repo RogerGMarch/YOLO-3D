@@ -30,7 +30,8 @@ A real-time 3D object detection system that combines YOLOv11 for object detectio
 
 2. Install dependencies:
    ```
-   pip install -r requirements.txt
+   uv init
+   uv add -r requirements.txt
    ```
 
 3. Download model weights (will be downloaded automatically on first run)
