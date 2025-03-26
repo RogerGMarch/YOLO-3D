@@ -24,7 +24,7 @@ A real-time 3D object detection system that combines YOLOv11 for object and pose
 
 1. Clone this repository:
    ```
-   git clone https://github.com/niconielsen32/YOLO-3D.git
+   git clone https://github.com/RogerGMarch/YOLO-3D.git
    cd YOLO-3D
    ```
 
