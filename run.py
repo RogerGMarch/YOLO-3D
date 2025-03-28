@@ -21,13 +21,155 @@ from depth_model import DepthEstimator
 from bbox3d_utils import BBox3DEstimator, BirdEyeView
 from load_camera_params import load_camera_params, apply_camera_params_to_estimator
 
+
+import json
+from datetime import datetime
+class TrackingDataExporter:
+    """Handles exporting tracking data to JSON for Houdini import"""
+    
+    def __init__(self, output_file="tracking_data.json", buffer_size=100):
+        """
+        Initialize the exporter
+        
+        Args:
+            output_file: Path to the output JSON file
+            buffer_size: Number of frames to buffer before writing to disk
+        """
+        self.output_file = output_file
+        self.buffer_size = buffer_size
+        self.frame_buffer = []
+        self.frame_count = 0
+        self.metadata = {
+            "created": datetime.now().isoformat(),
+            "description": "3D tracking data for Houdini import",
+            "version": "1.0"
+        }
+        
+        # Initialize file with header if it doesn't exist
+        if not os.path.exists(output_file):
+            self._initialize_file()
+        else:
+            # File exists, append to it
+            # Optionally, you might want to check if it's valid and has the correct structure
+            pass
+    
+    def _initialize_file(self):
+        """Create the initial JSON file with metadata structure"""
+        initial_data = {
+            "metadata": self.metadata,
+            "frames": []
+        }
+        with open(self.output_file, 'w') as f:
+            json.dump(initial_data, f)
+    
+    def add_frame(self, boxes_3d, frame_number, timestamp):
+        """
+        Add a frame to the buffer and write to disk if buffer is full
+        
+        Args:
+            boxes_3d: List of 3D box dictionaries containing detection data
+            frame_number: Current frame number
+            timestamp: Current timestamp
+        """
+        # Prepare frame data
+        frame_data = {
+            "frame": frame_number,
+            "timestamp": timestamp,
+            "objects": []
+        }
+        
+        # Process each detected object
+        for box in boxes_3d:
+            # Extract 2D bbox coordinates
+            x1, y1, x2, y2 = box['bbox_2d']
+            
+            # Create object entry
+            object_data = {
+                "id": box.get('object_id', -1),  # -1 if no tracking ID
+                "class": box['class_name'],
+                "score": float(box['score']),
+                "bbox": {
+                    "x1": float(x1),
+                    "y1": float(y1),
+                    "x2": float(x2),
+                    "y2": float(y2)
+                },
+                "depth": float(box['depth_value']),
+                "depth_method": box['depth_method']
+            }
+            
+            # Add keypoints if available
+            if 'keypoints' in box and box['keypoints'] is not None:
+                keypoints_data = []
+                for i, kpt in enumerate(box['keypoints']):
+                    x, y, conf = kpt
+                    depth = box.get('keypoint_depths', [])[i] if i < len(box.get('keypoint_depths', [])) else None
+                    
+                    keypoint_data = {
+                        "x": float(x),
+                        "y": float(y),
+                        "confidence": float(conf),
+                        "depth": float(depth) if depth is not None else None
+                    }
+                    keypoints_data.append(keypoint_data)
+                
+                object_data["keypoints"] = keypoints_data
+            
+            # Add to frame data
+            frame_data["objects"].append(object_data)
+        
+        # Add to buffer
+        self.frame_buffer.append(frame_data)
+        self.frame_count += 1
+        
+        # Write to disk if buffer is full
+        if len(self.frame_buffer) >= self.buffer_size:
+            self.flush()
+    
+    def flush(self):
+        """Write buffered frames to disk"""
+        if not self.frame_buffer:
+            return
+            
+        try:
+            # Read the existing data (just the metadata)
+            with open(self.output_file, 'r') as f:
+                data = json.load(f)
+            
+            # Append new frames
+            data["frames"].extend(self.frame_buffer)
+            
+            # Update metadata
+            data["metadata"]["last_updated"] = datetime.now().isoformat()
+            data["metadata"]["total_frames"] = self.frame_count
+            
+            # Write back to file
+            with open(self.output_file, 'w') as f:
+                json.dump(data, f)
+                
+            # Clear buffer
+            self.frame_buffer = []
+            
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"Error writing to {self.output_file}: {e}")
+            # Recreate the file from scratch
+            self._initialize_file()
+            # Try again with the new file
+            self.flush()
+    
+    def finalize(self):
+        """Finalize export and close file"""
+        self.flush()
+        print(f"Tracking data saved to {self.output_file} for Houdini import")
+        print(f"Total frames exported: {self.frame_count}")
+
 def main():
     """Main function."""
     # Configuration variables (modify these as needed)
     # ===============================================
     
     # Input/Output
-    source = 0 # Path to input video file or webcam index (0 for default camera)
+    source = "/media/M2_disk/roger/sonar/YOLO-3D/ROSALÍA.mp4" # Path to input video file or webcam index (0 for default camera)
     output_path = "output.mp4"  # Path to output video file
     
     # Model settings
@@ -49,6 +191,12 @@ def main():
     headless = True  # Enable headless mode (no UI)
     # Camera parameters - simplified approach
     camera_params_file = None  # Path to camera parameters file (None to use default parameters)
+
+    # JSON export settings
+    
+    json_output = "tracking_data.json"  # Path to output JSON file
+    json_buffer_size = 30  # Buffer size (frames before writing to disk)
+
     # ===============================================
     
     print(f"Using device: {device}")
@@ -126,6 +274,8 @@ def main():
     start_time = time.time()
     fps_display = "FPS: --"
     
+
+    tracking_exporter = TrackingDataExporter(json_output, json_buffer_size)
     print("Starting processing...")
     
     # Main loop
@@ -231,9 +381,12 @@ def main():
                     print(f"Error processing detection: {e}")
                     continue
             
-            # Clean up trackers for objects that are no longer detected
+            # Clean up trackers for objects that are no longer
+            # 
+            #  detected
             bbox3d_estimator.cleanup_trackers(active_ids)
-            
+            timestamp = time.time() - start_time  # Time since start of processing
+            tracking_exporter.add_frame(boxes_3d, frame_count, timestamp)
             # Step 4: Visualization
             # Draw boxes on the result frame
             for box_3d in boxes_3d:
@@ -290,6 +443,7 @@ def main():
                 except Exception as e:
                     print(f"Error drawing object: {e}")
                     continue
+
             
             # Draw Bird's Eye View if enabled
             if enable_bev:
@@ -384,8 +538,12 @@ def main():
     cap.release()
     out.release()
     cv2.destroyAllWindows()
-    
+    tracking_exporter.finalize()
     print(f"Processing complete. Output saved to {output_path}")
+    print(f"Tracking data saved to {json_output} for Houdini import")
+
+
+
 
 if __name__ == "__main__":
     try:
